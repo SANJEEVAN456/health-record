@@ -1,191 +1,189 @@
-import fs from 'fs'
-import path from 'path'
-import sqlite3 from 'sqlite3'
-import { fileURLToPath } from 'url'
+import mongoose from 'mongoose'
 
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = path.dirname(__filename)
-const databasePath = process.env.DATABASE_PATH || path.join(__dirname, 'reminders.sqlite')
-
-fs.mkdirSync(__dirname, { recursive: true })
-
-const sqlite = sqlite3.verbose()
-const db = new sqlite.Database(databasePath)
-
-function run(query, params = []) {
-  return new Promise((resolve, reject) => {
-    db.run(query, params, function onRun(error) {
-      if (error) {
-        reject(error)
-        return
-      }
-
-      resolve({
-        id: this.lastID,
-        changes: this.changes,
-      })
-    })
-  })
-}
-
-function get(query, params = []) {
-  return new Promise((resolve, reject) => {
-    db.get(query, params, (error, row) => {
-      if (error) {
-        reject(error)
-        return
-      }
-
-      resolve(row)
-    })
-  })
-}
-
-function all(query, params = []) {
-  return new Promise((resolve, reject) => {
-    db.all(query, params, (error, rows) => {
-      if (error) {
-        reject(error)
-        return
-      }
-
-      resolve(rows)
-    })
-  })
-}
+let isConnected = false
 
 function createDuplicateKey(reminder) {
   const timeValues = reminder.times.map((entry) => entry.time).sort().join('|')
   return `${reminder.medicineName.toLowerCase()}::${reminder.phoneNumber}::${timeValues}::${reminder.timezone}`
 }
 
-async function ensureReminderColumns() {
-  const columns = await all('PRAGMA table_info(reminders)')
-  const columnNames = new Set(columns.map((column) => column.name))
+const reminderSchema = new mongoose.Schema(
+  {
+    medicineName: { type: String, required: true, trim: true },
+    phoneNumber: { type: String, required: true, trim: true },
+    timezone: { type: String, required: true, trim: true },
+    enabled: { type: Number, required: true, default: 1 },
+    repeatDaily: { type: Number, required: true, default: 1 },
+    timeSlots: { type: mongoose.Schema.Types.Mixed, required: true },
+    times: { type: [mongoose.Schema.Types.Mixed], required: true },
+    duplicateKey: { type: String, required: true, unique: true, index: true },
+    lastSentKey: { type: String, default: null },
+    totalTablets: { type: Number, required: true, default: 0 },
+    currentTablets: { type: Number, required: true, default: 0 },
+    missedLeaves: { type: Number, required: true, default: 0 },
+    lastLowStockAlertAt: { type: String, default: null },
+    voiceEnabled: { type: Number, required: true, default: 0 },
+    caregiverPhoneNumber: { type: String, default: null },
+  },
+  {
+    timestamps: true,
+  },
+)
 
-  if (!columnNames.has('totalTablets')) {
-    await run('ALTER TABLE reminders ADD COLUMN totalTablets INTEGER NOT NULL DEFAULT 0')
+const doseEventSchema = new mongoose.Schema(
+  {
+    reminderId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Reminder',
+      required: true,
+      index: true,
+    },
+    scheduledKey: { type: String, required: true },
+    scheduledDate: { type: String, required: true },
+    scheduledTime: { type: String, required: true },
+    slotKey: { type: String, required: true },
+    slotLabel: { type: String, required: true },
+    status: { type: String, required: true, default: 'pending' },
+    nextAlertAt: { type: String, required: true },
+    lastAlertAt: { type: String, default: null },
+    leaveCount: { type: Number, required: true, default: 0 },
+  },
+  {
+    timestamps: true,
+  },
+)
+
+doseEventSchema.index({ reminderId: 1, scheduledKey: 1 }, { unique: true })
+
+const Reminder = mongoose.models.Reminder || mongoose.model('Reminder', reminderSchema)
+const DoseEvent = mongoose.models.DoseEvent || mongoose.model('DoseEvent', doseEventSchema)
+
+function normalizeReminder(doc) {
+  if (!doc) {
+    return null
   }
 
-  if (!columnNames.has('currentTablets')) {
-    await run('ALTER TABLE reminders ADD COLUMN currentTablets INTEGER NOT NULL DEFAULT 0')
+  const reminder = doc.toObject ? doc.toObject() : doc
+  return {
+    id: String(reminder._id),
+    medicineName: reminder.medicineName,
+    phoneNumber: reminder.phoneNumber,
+    timezone: reminder.timezone,
+    enabled: reminder.enabled,
+    repeatDaily: reminder.repeatDaily,
+    timeSlots:
+      typeof reminder.timeSlots === 'string'
+        ? reminder.timeSlots
+        : JSON.stringify(reminder.timeSlots),
+    times:
+      typeof reminder.times === 'string' ? reminder.times : JSON.stringify(reminder.times),
+    duplicateKey: reminder.duplicateKey,
+    lastSentKey: reminder.lastSentKey,
+    totalTablets: reminder.totalTablets,
+    currentTablets: reminder.currentTablets,
+    missedLeaves: reminder.missedLeaves,
+    lastLowStockAlertAt: reminder.lastLowStockAlertAt,
+    voiceEnabled: reminder.voiceEnabled,
+    caregiverPhoneNumber: reminder.caregiverPhoneNumber,
+    createdAt: reminder.createdAt,
+    updatedAt: reminder.updatedAt,
+  }
+}
+
+function normalizeDoseEvent(doc, reminderDoc = null) {
+  if (!doc) {
+    return null
   }
 
-  if (!columnNames.has('missedLeaves')) {
-    await run('ALTER TABLE reminders ADD COLUMN missedLeaves INTEGER NOT NULL DEFAULT 0')
-  }
+  const dose = doc.toObject ? doc.toObject() : doc
+  const reminder =
+    reminderDoc ??
+    (dose.reminderId && typeof dose.reminderId === 'object' && !Array.isArray(dose.reminderId)
+      ? dose.reminderId
+      : null)
 
-  if (!columnNames.has('lastLowStockAlertAt')) {
-    await run('ALTER TABLE reminders ADD COLUMN lastLowStockAlertAt TEXT')
+  return {
+    id: String(dose._id),
+    reminderId: String(reminder?._id || dose.reminderId),
+    scheduledKey: dose.scheduledKey,
+    scheduledDate: dose.scheduledDate,
+    scheduledTime: dose.scheduledTime,
+    slotKey: dose.slotKey,
+    slotLabel: dose.slotLabel,
+    status: dose.status,
+    nextAlertAt: dose.nextAlertAt,
+    lastAlertAt: dose.lastAlertAt,
+    leaveCount: dose.leaveCount,
+    createdAt: dose.createdAt,
+    updatedAt: dose.updatedAt,
+    medicineName: reminder?.medicineName,
+    phoneNumber: reminder?.phoneNumber,
+    timezone: reminder?.timezone,
+    currentTablets: reminder?.currentTablets,
+    totalTablets: reminder?.totalTablets,
+    missedLeaves: reminder?.missedLeaves,
+    lastLowStockAlertAt: reminder?.lastLowStockAlertAt,
+    repeatDaily: reminder?.repeatDaily,
+    enabled: reminder?.enabled,
+    caregiverPhoneNumber: reminder?.caregiverPhoneNumber,
+    voiceEnabled: reminder?.voiceEnabled,
   }
+}
 
-  if (!columnNames.has('voiceEnabled')) {
-    await run('ALTER TABLE reminders ADD COLUMN voiceEnabled INTEGER NOT NULL DEFAULT 0')
-  }
-
-  if (!columnNames.has('caregiverPhoneNumber')) {
-    await run('ALTER TABLE reminders ADD COLUMN caregiverPhoneNumber TEXT')
+function buildReminderPayload(reminder) {
+  return {
+    medicineName: reminder.medicineName,
+    phoneNumber: reminder.phoneNumber,
+    timezone: reminder.timezone,
+    enabled: reminder.enabled,
+    repeatDaily: reminder.repeatDaily,
+    timeSlots:
+      typeof reminder.timeSlots === 'string'
+        ? JSON.parse(reminder.timeSlots)
+        : reminder.timeSlots,
+    times: Array.isArray(reminder.times) ? reminder.times : JSON.parse(reminder.times),
+    duplicateKey: createDuplicateKey(reminder),
+    totalTablets: reminder.totalTablets,
+    currentTablets: reminder.currentTablets,
+    voiceEnabled: reminder.voiceEnabled,
+    caregiverPhoneNumber: reminder.caregiverPhoneNumber,
   }
 }
 
 export async function initializeDatabase() {
-  await run('PRAGMA foreign_keys = ON')
+  if (isConnected) {
+    return
+  }
 
-  await run(`
-    CREATE TABLE IF NOT EXISTS reminders (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      medicineName TEXT NOT NULL,
-      phoneNumber TEXT NOT NULL,
-      timezone TEXT NOT NULL,
-      enabled INTEGER NOT NULL DEFAULT 1,
-      repeatDaily INTEGER NOT NULL DEFAULT 1,
-      timeSlots TEXT NOT NULL,
-      times TEXT NOT NULL,
-      duplicateKey TEXT NOT NULL UNIQUE,
-      lastSentKey TEXT,
-      totalTablets INTEGER NOT NULL DEFAULT 0,
-      currentTablets INTEGER NOT NULL DEFAULT 0,
-      missedLeaves INTEGER NOT NULL DEFAULT 0,
-      lastLowStockAlertAt TEXT,
-      voiceEnabled INTEGER NOT NULL DEFAULT 0,
-      caregiverPhoneNumber TEXT,
-      createdAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      updatedAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-    )
-  `)
+  const mongoUri = process.env.MONGODB_URI
 
-  await ensureReminderColumns()
+  if (!mongoUri) {
+    throw new Error('MONGODB_URI is missing. Please add your MongoDB Atlas connection string.')
+  }
 
-  await run(`
-    CREATE TABLE IF NOT EXISTS dose_events (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      reminderId INTEGER NOT NULL,
-      scheduledKey TEXT NOT NULL,
-      scheduledDate TEXT NOT NULL,
-      scheduledTime TEXT NOT NULL,
-      slotKey TEXT NOT NULL,
-      slotLabel TEXT NOT NULL,
-      status TEXT NOT NULL DEFAULT 'pending',
-      nextAlertAt TEXT NOT NULL,
-      lastAlertAt TEXT,
-      leaveCount INTEGER NOT NULL DEFAULT 0,
-      createdAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      updatedAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      UNIQUE(reminderId, scheduledKey),
-      FOREIGN KEY (reminderId) REFERENCES reminders(id) ON DELETE CASCADE
-    )
-  `)
+  await mongoose.connect(mongoUri, {
+    dbName: process.env.MONGODB_DB_NAME || undefined,
+  })
+
+  isConnected = true
 }
 
 export async function getReminders() {
-  return all('SELECT * FROM reminders ORDER BY createdAt DESC, id DESC')
+  const reminders = await Reminder.find().sort({ createdAt: -1, _id: -1 })
+  return reminders.map(normalizeReminder)
 }
 
 export async function getReminderById(id) {
-  return get('SELECT * FROM reminders WHERE id = ?', [id])
+  const reminder = await Reminder.findById(id)
+  return normalizeReminder(reminder)
 }
 
 export async function createReminder(reminder) {
-  const duplicateKey = createDuplicateKey(reminder)
-
   try {
-    const result = await run(
-      `
-        INSERT INTO reminders (
-          medicineName,
-          phoneNumber,
-          timezone,
-          enabled,
-          repeatDaily,
-          timeSlots,
-          times,
-          duplicateKey,
-          totalTablets,
-          currentTablets,
-          voiceEnabled,
-          caregiverPhoneNumber
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `,
-      [
-        reminder.medicineName,
-        reminder.phoneNumber,
-        reminder.timezone,
-        reminder.enabled,
-        reminder.repeatDaily,
-        reminder.timeSlots,
-        JSON.stringify(reminder.times),
-        duplicateKey,
-        reminder.totalTablets,
-        reminder.currentTablets,
-        reminder.voiceEnabled,
-        reminder.caregiverPhoneNumber,
-      ],
-    )
-
-    return getReminderById(result.id)
+    const createdReminder = await Reminder.create(buildReminderPayload(reminder))
+    return normalizeReminder(createdReminder)
   } catch (error) {
-    if (error.message.includes('UNIQUE constraint failed')) {
+    if (error?.code === 11000) {
       throw new Error('DUPLICATE_REMINDER')
     }
 
@@ -194,49 +192,19 @@ export async function createReminder(reminder) {
 }
 
 export async function updateReminder(id, reminder) {
-  const duplicateKey = createDuplicateKey(reminder)
-
   try {
-    await run(
-      `
-        UPDATE reminders
-        SET
-          medicineName = ?,
-          phoneNumber = ?,
-          timezone = ?,
-          enabled = ?,
-          repeatDaily = ?,
-          timeSlots = ?,
-          times = ?,
-          duplicateKey = ?,
-          totalTablets = ?,
-          currentTablets = ?,
-          voiceEnabled = ?,
-          caregiverPhoneNumber = ?,
-          lastLowStockAlertAt = NULL,
-          updatedAt = CURRENT_TIMESTAMP
-        WHERE id = ?
-      `,
-      [
-        reminder.medicineName,
-        reminder.phoneNumber,
-        reminder.timezone,
-        reminder.enabled,
-        reminder.repeatDaily,
-        reminder.timeSlots,
-        JSON.stringify(reminder.times),
-        duplicateKey,
-        reminder.totalTablets,
-        reminder.currentTablets,
-        reminder.voiceEnabled,
-        reminder.caregiverPhoneNumber,
-        id,
-      ],
+    const updatedReminder = await Reminder.findByIdAndUpdate(
+      id,
+      {
+        ...buildReminderPayload(reminder),
+        lastLowStockAlertAt: null,
+      },
+      { new: true, runValidators: true },
     )
 
-    return getReminderById(id)
+    return normalizeReminder(updatedReminder)
   } catch (error) {
-    if (error.message.includes('UNIQUE constraint failed')) {
+    if (error?.code === 11000) {
       throw new Error('DUPLICATE_REMINDER')
     }
 
@@ -245,192 +213,135 @@ export async function updateReminder(id, reminder) {
 }
 
 export async function updateReminderCounts(id, values) {
-  await run(
-    `
-      UPDATE reminders
-      SET
-        currentTablets = ?,
-        missedLeaves = ?,
-        lastLowStockAlertAt = ?,
-        updatedAt = CURRENT_TIMESTAMP
-      WHERE id = ?
-    `,
-    [values.currentTablets, values.missedLeaves, values.lastLowStockAlertAt, id],
+  const updatedReminder = await Reminder.findByIdAndUpdate(
+    id,
+    {
+      currentTablets: values.currentTablets,
+      missedLeaves: values.missedLeaves,
+      lastLowStockAlertAt: values.lastLowStockAlertAt,
+    },
+    { new: true },
   )
 
-  return getReminderById(id)
+  return normalizeReminder(updatedReminder)
 }
 
 export async function markReminderSent(id, lastSentKey) {
-  await run(
-    `
-      UPDATE reminders
-      SET lastSentKey = ?, updatedAt = CURRENT_TIMESTAMP
-      WHERE id = ?
-    `,
-    [lastSentKey, id],
-  )
+  await Reminder.findByIdAndUpdate(id, { lastSentKey })
 }
 
 export async function setReminderEnabled(id, enabled) {
-  await run(
-    `
-      UPDATE reminders
-      SET enabled = ?, updatedAt = CURRENT_TIMESTAMP
-      WHERE id = ?
-    `,
-    [enabled, id],
-  )
+  await Reminder.findByIdAndUpdate(id, { enabled })
 }
 
 export async function createDoseEvent(event) {
-  const result = await run(
-    `
-      INSERT OR IGNORE INTO dose_events (
-        reminderId,
-        scheduledKey,
-        scheduledDate,
-        scheduledTime,
-        slotKey,
-        slotLabel,
-        status,
-        nextAlertAt
-      )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `,
-    [
-      event.reminderId,
-      event.scheduledKey,
-      event.scheduledDate,
-      event.scheduledTime,
-      event.slotKey,
-      event.slotLabel,
-      event.status,
-      event.nextAlertAt,
-    ],
-  )
+  try {
+    const createdDose = await DoseEvent.create({
+      reminderId: event.reminderId,
+      scheduledKey: event.scheduledKey,
+      scheduledDate: event.scheduledDate,
+      scheduledTime: event.scheduledTime,
+      slotKey: event.slotKey,
+      slotLabel: event.slotLabel,
+      status: event.status,
+      nextAlertAt: event.nextAlertAt,
+    })
 
-  if (result.changes === 0) {
-    return getDoseEventByReminderKey(event.reminderId, event.scheduledKey)
+    return normalizeDoseEvent(createdDose)
+  } catch (error) {
+    if (error?.code === 11000) {
+      return getDoseEventByReminderKey(event.reminderId, event.scheduledKey)
+    }
+
+    throw error
   }
-
-  return getDoseEventById(result.id)
 }
 
 export async function getDoseEventByReminderKey(reminderId, scheduledKey) {
-  return get(
-    'SELECT * FROM dose_events WHERE reminderId = ? AND scheduledKey = ?',
-    [reminderId, scheduledKey],
-  )
+  const doseEvent = await DoseEvent.findOne({ reminderId, scheduledKey })
+  return normalizeDoseEvent(doseEvent)
 }
 
 export async function getDoseEventById(id) {
-  return get('SELECT * FROM dose_events WHERE id = ?', [id])
+  const doseEvent = await DoseEvent.findById(id)
+  return normalizeDoseEvent(doseEvent)
 }
 
 export async function getLatestOpenDoseByPhone(phoneNumber) {
-  return get(
-    `
-      SELECT
-        dose_events.*,
-        reminders.medicineName,
-        reminders.phoneNumber,
-        reminders.timezone,
-        reminders.currentTablets,
-        reminders.totalTablets,
-        reminders.missedLeaves,
-        reminders.lastLowStockAlertAt,
-        reminders.enabled
-      FROM dose_events
-      INNER JOIN reminders ON reminders.id = dose_events.reminderId
-      WHERE
-        reminders.phoneNumber = ?
-        AND dose_events.status IN ('pending', 'snoozed')
-      ORDER BY dose_events.updatedAt DESC, dose_events.id DESC
-      LIMIT 1
-    `,
-    [phoneNumber],
-  )
+  const reminder = await Reminder.findOne({ phoneNumber }).select('_id')
+
+  if (!reminder) {
+    return null
+  }
+
+  const doseEvent = await DoseEvent.findOne({
+    reminderId: reminder._id,
+    status: { $in: ['pending', 'snoozed'] },
+  })
+    .sort({ updatedAt: -1, _id: -1 })
+    .populate('reminderId')
+
+  if (!doseEvent || !doseEvent.reminderId) {
+    return null
+  }
+
+  return normalizeDoseEvent(doseEvent, doseEvent.reminderId)
 }
 
 export async function getActiveDoseEvents() {
-  return all(
-    `
-      SELECT
-        dose_events.*,
-        reminders.medicineName,
-        reminders.phoneNumber,
-        reminders.timezone,
-        reminders.currentTablets,
-        reminders.totalTablets,
-        reminders.missedLeaves,
-        reminders.enabled
-      FROM dose_events
-      INNER JOIN reminders ON reminders.id = dose_events.reminderId
-      WHERE dose_events.status IN ('pending', 'snoozed')
-      ORDER BY dose_events.nextAlertAt ASC, dose_events.id ASC
-    `,
-  )
+  const doseEvents = await DoseEvent.find({ status: { $in: ['pending', 'snoozed'] } })
+    .sort({ nextAlertAt: 1, _id: 1 })
+    .populate('reminderId')
+
+  return doseEvents
+    .filter((doseEvent) => doseEvent.reminderId)
+    .map((doseEvent) => normalizeDoseEvent(doseEvent, doseEvent.reminderId))
 }
 
 export async function getDoseEventsReadyForAlert(nowIso) {
-  return all(
-    `
-      SELECT
-        dose_events.*,
-        reminders.medicineName,
-        reminders.phoneNumber,
-        reminders.timezone,
-        reminders.currentTablets,
-        reminders.totalTablets,
-        reminders.missedLeaves,
-        reminders.repeatDaily,
-        reminders.enabled
-      FROM dose_events
-      INNER JOIN reminders ON reminders.id = dose_events.reminderId
-      WHERE
-        dose_events.status IN ('pending', 'snoozed')
-        AND dose_events.nextAlertAt <= ?
-        AND reminders.enabled = 1
-      ORDER BY dose_events.nextAlertAt ASC, dose_events.id ASC
-    `,
-    [nowIso],
-  )
+  const doseEvents = await DoseEvent.find({
+    status: { $in: ['pending', 'snoozed'] },
+    nextAlertAt: { $lte: nowIso },
+  })
+    .sort({ nextAlertAt: 1, _id: 1 })
+    .populate({
+      path: 'reminderId',
+      match: { enabled: 1 },
+    })
+
+  return doseEvents
+    .filter((doseEvent) => doseEvent.reminderId)
+    .map((doseEvent) => normalizeDoseEvent(doseEvent, doseEvent.reminderId))
 }
 
 export async function markDoseAlertSent(id, values) {
-  await run(
-    `
-      UPDATE dose_events
-      SET
-        lastAlertAt = ?,
-        nextAlertAt = ?,
-        updatedAt = CURRENT_TIMESTAMP
-      WHERE id = ?
-    `,
-    [values.lastAlertAt, values.nextAlertAt, id],
+  const updatedDose = await DoseEvent.findByIdAndUpdate(
+    id,
+    {
+      lastAlertAt: values.lastAlertAt,
+      nextAlertAt: values.nextAlertAt,
+    },
+    { new: true },
   )
 
-  return getDoseEventById(id)
+  return normalizeDoseEvent(updatedDose)
 }
 
 export async function updateDoseEventAction(id, values) {
-  await run(
-    `
-      UPDATE dose_events
-      SET
-        status = ?,
-        nextAlertAt = ?,
-        leaveCount = ?,
-        updatedAt = CURRENT_TIMESTAMP
-      WHERE id = ?
-    `,
-    [values.status, values.nextAlertAt, values.leaveCount, id],
+  const updatedDose = await DoseEvent.findByIdAndUpdate(
+    id,
+    {
+      status: values.status,
+      nextAlertAt: values.nextAlertAt,
+      leaveCount: values.leaveCount,
+    },
+    { new: true },
   )
 
-  return getDoseEventById(id)
+  return normalizeDoseEvent(updatedDose)
 }
 
 export async function deleteReminder(id) {
-  await run('DELETE FROM reminders WHERE id = ?', [id])
+  await DoseEvent.deleteMany({ reminderId: id })
+  await Reminder.findByIdAndDelete(id)
 }

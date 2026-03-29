@@ -4,7 +4,7 @@ A full-stack medicine reminder app for elderly users. It includes:
 
 - A simple React frontend with large controls
 - An Express API
-- SQLite storage
+- MongoDB Atlas storage
 - A `node-cron` scheduler that checks reminders every minute
 - Twilio SMS and optional WhatsApp support for sending medicine alerts
 - Optional Twilio voice calls for spoken reminders
@@ -13,7 +13,7 @@ A full-stack medicine reminder app for elderly users. It includes:
 
 - `frontend/` - Vite + React user interface
 - `backend/` - Express API and cron scheduler
-- `database/` - SQLite connection setup and local database file
+- `database/` - MongoDB models and data helpers
 
 ## Features
 
@@ -47,8 +47,9 @@ A full-stack medicine reminder app for elderly users. It includes:
    ```
 
 3. Add your Twilio values inside `.env`.
-4. If you want WhatsApp alerts, add your Twilio WhatsApp-enabled sender number too.
-5. Set `VITE_API_BASE_URL` when frontend and backend are deployed on different URLs.
+4. Add your MongoDB Atlas connection string to `MONGODB_URI`
+5. If you want WhatsApp alerts, add your Twilio WhatsApp-enabled sender number too.
+6. Set `VITE_API_BASE_URL` when frontend and backend are deployed on different URLs.
 
 ## Run Locally
 
@@ -98,13 +99,13 @@ This repo includes [render.yaml](c:/Users/venka/OneDrive/Desktop/health-record/h
 2. Create a new Render Blueprint or Web Service from the repo
 3. Add the environment variables from `.env.example`
 4. Set `FRONTEND_URL` to your Vercel domain
-5. Deploy
+5. Set `MONGODB_URI` to your MongoDB Atlas connection string
+6. Deploy
 
 The Render config includes:
 
 - `/api/health` health check
-- Persistent disk for SQLite
-- `DATABASE_PATH` pointing to the mounted disk
+- Atlas-ready backend configuration
 
 ### Docker
 
@@ -122,6 +123,7 @@ Then open `http://localhost:4000`
 ## Twilio Notes
 
 - Phone numbers must be stored in E.164 format, for example `+919876543210`
+- MongoDB Atlas is required for backend storage
 - The scheduler checks reminders every minute
 - If Twilio SMS credentials are missing, the API still runs, but SMS sending will fail until valid credentials are added
 - WhatsApp alerts require `TWILIO_WHATSAPP_NUMBER` and a Twilio WhatsApp-enabled setup or sandbox

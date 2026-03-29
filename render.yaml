@@ -6,12 +6,6 @@ services:
     buildCommand: npm install
     startCommand: npm start
     healthCheckPath: /api/health
-    disk:
-      name: reminders-data
-      mountPath: /opt/render/project/src/database
-      sizeGB: 1
     envVars:
       - key: PORT
         value: 4000
-      - key: DATABASE_PATH
-        value: /opt/render/project/src/database/reminders.sqlite
