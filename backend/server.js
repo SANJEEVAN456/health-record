@@ -29,7 +29,7 @@ dotenv.config()
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
-const distPath = path.resolve(__dirname, '../dist')
+const distPath = path.resolve(__dirname, '../frontend/dist')
 
 const app = express()
 const port = Number(process.env.PORT || 4000)
