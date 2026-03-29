@@ -1,0 +1,322 @@
+.app-shell {
+  width: min(980px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 32px 0 56px;
+}
+
+.hero-card,
+.panel,
+.reminder-card,
+.dose-card {
+  border-radius: 28px;
+  box-shadow: 0 20px 50px rgba(37, 56, 68, 0.08);
+}
+
+.hero-card {
+  padding: 32px;
+  background:
+    radial-gradient(circle at top right, rgba(255, 215, 168, 0.9), transparent 30%),
+    linear-gradient(145deg, #fef8ef, #eef8ff 65%, #f7fffb);
+  border: 1px solid rgba(196, 210, 220, 0.7);
+  margin-bottom: 24px;
+}
+
+.eyebrow {
+  margin: 0 0 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #7c5c2f;
+}
+
+.hero-card h1 {
+  margin: 0;
+  font-size: clamp(2.2rem, 5vw, 4rem);
+  line-height: 1;
+}
+
+.hero-text {
+  max-width: 42rem;
+  margin-top: 12px;
+  font-size: 1.05rem;
+}
+
+.reply-help {
+  margin-top: 14px;
+  max-width: 42rem;
+  color: #425a69;
+}
+
+.onboarding-card {
+  max-width: 640px;
+  margin: 40px auto 0;
+}
+
+.hero-actions {
+  margin-top: 16px;
+}
+
+.hero-badges,
+.pill-row,
+.action-row,
+.triple-action-row,
+.switch-row,
+.reminder-top {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.hero-badges {
+  margin-top: 16px;
+}
+
+.hero-badge,
+.time-pill,
+.status {
+  border-radius: 999px;
+  padding: 9px 14px;
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+
+.hero-badge,
+.time-pill {
+  background: #f4efe5;
+  color: #5f4d2f;
+}
+
+.panel {
+  background: rgba(255, 255, 255, 0.88);
+  border: 1px solid rgba(198, 214, 223, 0.9);
+  padding: 24px;
+  backdrop-filter: blur(12px);
+  margin-bottom: 24px;
+}
+
+.panel-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.panel-heading h2,
+.reminder-card h3,
+.dose-card h3 {
+  margin: 0;
+}
+
+.panel-heading p,
+.meta-text,
+.reminder-card p,
+.dose-card p {
+  margin: 6px 0 0;
+  color: #526674;
+}
+
+.reminder-form,
+.reminder-list {
+  display: grid;
+  gap: 16px;
+}
+
+.field {
+  display: grid;
+  gap: 8px;
+}
+
+.field span,
+.checkbox-row span {
+  font-weight: 700;
+  color: #183041;
+}
+
+.field input,
+.field select,
+.time-card input {
+  width: 100%;
+  box-sizing: border-box;
+  border-radius: 18px;
+  border: 1px solid #c8d6df;
+  background: #fff;
+  padding: 16px 18px;
+  font-size: 1.05rem;
+  color: #183041;
+}
+
+.field input:focus,
+.field select:focus,
+.time-card input:focus {
+  outline: 3px solid rgba(75, 133, 114, 0.2);
+  border-color: #4b8572;
+}
+
+.time-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.count-grid {
+  align-items: end;
+}
+
+.time-card,
+.dose-card,
+.reminder-card {
+  display: grid;
+  gap: 12px;
+  padding: 20px;
+  border: 1px solid #dbe6eb;
+  background: #ffffff;
+}
+
+.time-card {
+  border-radius: 22px;
+  background: #f7fbfc;
+}
+
+.dose-card {
+  background: linear-gradient(180deg, #fff8ec, #ffffff);
+}
+
+.checkbox-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 1rem;
+}
+
+.checkbox-row input {
+  width: 22px;
+  height: 22px;
+  accent-color: #4b8572;
+}
+
+.reminder-top,
+.action-row {
+  justify-content: space-between;
+  align-items: center;
+}
+
+.triple-action-row button,
+.action-row button {
+  flex: 1 1 160px;
+}
+
+.primary-button,
+.secondary-button,
+.danger-button,
+.ghost-button {
+  border: none;
+  border-radius: 18px;
+  padding: 14px 18px;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    transform 0.15s ease,
+    opacity 0.15s ease;
+}
+
+.primary-button:hover,
+.secondary-button:hover,
+.danger-button:hover,
+.ghost-button:hover {
+  transform: translateY(-1px);
+}
+
+.primary-button:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.primary-button {
+  background: #1d6f5f;
+  color: #fff;
+}
+
+.secondary-button,
+.ghost-button {
+  background: #eaf4f1;
+  color: #18463d;
+}
+
+.danger-button {
+  background: #fff0ec;
+  color: #a24835;
+}
+
+.ghost-button {
+  background: #f7f0e8;
+  color: #7c5c2f;
+}
+
+.banner {
+  border-radius: 18px;
+  padding: 14px 16px;
+  margin-bottom: 16px;
+  font-weight: 600;
+}
+
+.banner.error {
+  background: #fff0ec;
+  color: #9b3f30;
+}
+
+.banner.success {
+  background: #eaf7f2;
+  color: #1f6958;
+}
+
+.empty-state {
+  padding: 24px;
+  text-align: center;
+  border-radius: 22px;
+  background: #f7fbfc;
+  color: #526674;
+}
+
+.status.on {
+  background: #eaf7f2;
+  color: #1f6958;
+}
+
+.status.off {
+  background: #fff0ec;
+  color: #9b3f30;
+}
+
+.status.warm {
+  background: #fff7e2;
+  color: #8c641d;
+}
+
+@media (max-width: 720px) {
+  .app-shell {
+    width: min(100% - 20px, 980px);
+    padding-top: 20px;
+  }
+
+  .hero-card,
+  .panel {
+    padding: 18px;
+    border-radius: 22px;
+  }
+
+  .panel-heading,
+  .switch-row,
+  .action-row,
+  .triple-action-row,
+  .reminder-top {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .time-grid {
+    grid-template-columns: 1fr;
+  }
+}
